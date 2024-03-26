@@ -50,7 +50,6 @@ REQ_FIELDS_BY_TYPE = {
 
     # usually a technical report
     'techreport': MIN_FIELDS.union({
-        'institution'
     }),
 
     # usually a doctoral thesis
@@ -66,9 +65,9 @@ REQ_FIELDS_BY_TYPE = {
 }
 ################################################################################
 FIELD_VENUE_BY_TYPE = {
-    # book:             n/a
-    # inbook:           n/a
-    # incollection:     n/a
+    'book':             None,
+    'inbook':           None,
+    'incollection':     None,
 
     'article':          'journal',
 
@@ -76,10 +75,10 @@ FIELD_VENUE_BY_TYPE = {
     'inproceedings':    'booktitle',
     'conference':       'booktitle',
 
-    'techreport':       'institution',
-    'phdthesis':        'school'
+    'techreport':       None,
+    'phdthesis':        None,
 
-    # misc:             n/a
+    'misc':             None
 }
 ################################################################################
 from pybtex.database import parse_file, BibliographyData, Entry
@@ -163,22 +162,10 @@ def parse_names_mapping(fp_short_names):
     ))
     return mapping, reader.fieldnames
 
-def save_added_mapping(fp_short_names, header_row, new_kvs):
-    rows_written = 0
-    with open(fp_short_names, 'a', newline='', encoding='utf-8') as db:
-        writer = DictWriter(db, fieldnames=header_row)
-        for (k, v) in new_kvs:
-            row = dict((col, '') for col in header_row)
-            row[COL_ORIGINAL] = k
-            row[COL_SHORT] = v
-            writer.writerow(row)
-            rows_written += 1
-    return rows_written
-
 def condense_bib_file(fp_in, fp_mapping, sel_fields=False):
     # parse the mapping from original names to short names
     mapping, header_row = parse_names_mapping(fp_mapping)
-    added_mapping = []
+    new_venues = list()
     # Parse the .bib file
     # NOTE: force to accept .bib format only
     bib_data = parse_file(fp_in, bib_format='bibtex')
@@ -200,19 +187,21 @@ def condense_bib_file(fp_in, fp_mapping, sel_fields=False):
         # Shorten venue names
         # Identify venue field value
         field_venue = FIELD_VENUE_BY_TYPE[entry.type]
-        if field_venue in entry.fields:
+        if field_venue is None:
+            # if venue is not specified by an entry type, skip
+            print('\tNo venue field is specified to be shortened. Skip')
+            venue = None
+            pass
+        elif field_venue in entry.fields:
             venue = entry.fields[field_venue]
             if venue in mapping:
                 short_name = mapping[venue]
             else:
-                print('\tA short name has not been specified. Would you like to add one?')
-                print('Original value:\n{}\n'.format(venue))
-                short_name = input('Key in a short value and [enter] to confirm. Or [enter] to use the original value:\n')
-                if short_name == '':
-                    short_name = venue
-                added_mapping.append((venue, short_name))
+                if venue not in new_venues:
+                    new_venues.append(venue)
+                short_name = None
         else:
-            print('\tI could not find field {}, which is expected for this entry type.'.format(
+            print('\tI could not find field `{}`, which is expected for this entry type.'.format(
                 field_venue
             ))
             exit('Ensure this field is recorded. Exiting')
@@ -247,8 +236,9 @@ def condense_bib_file(fp_in, fp_mapping, sel_fields=False):
                 unrecognized_bib[entry_key] = entry
 
 
-        # Substitute venue field data
-        new_entry_fields[field_venue] = short_name
+        if venue is not None:
+            # Substitute venue field data
+            new_entry_fields[field_venue] = short_name
         
         # Record new entry
         condensed_bib[entry_key] = Entry(
@@ -261,6 +251,17 @@ def condense_bib_file(fp_in, fp_mapping, sel_fields=False):
     print('I have iterated through all {} entries in this bib file.'.format(
         count
     ))
+
+    if len(new_venues) > 0:
+        print('There are {} venue names that I did not know how to shorten them'.format(
+            len(new_venues)
+        )) 
+        print('=' * 80)
+        for v in new_venues:
+            print(v)
+        print('=' * 80)
+        exit('Please specify them in the short names mapping and run this again')
+
     print('I recognized and condensed {} entries as you configured'.format(
         len(condensed_bib)
     ))
@@ -270,14 +271,6 @@ def condense_bib_file(fp_in, fp_mapping, sel_fields=False):
 
     BibliographyData(entries=condensed_bib).to_file(fp_out)
     print('I have exported the condensed bibliography to "{}"'.format(fp_out))
-
-    if len(added_mapping) > 0:
-        n_new_rows = save_added_mapping(fp_mapping, header_row, added_mapping)
-        print('\nI have added the following {} records into the mapping file:'.format(
-            n_new_rows
-        ))
-        for (k, v) in added_mapping:
-            print('{}\t=>\t{}'.format(k, v))
 
     if len(unrecognized_bib) > 0:
         print('-' * 80)
