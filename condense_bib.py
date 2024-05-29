@@ -11,7 +11,7 @@ MIN_FIELDS = {
     'title',
     'author',
     'year',
-    'publisher'
+    #'publisher'
 }
 REQ_FIELDS_BY_TYPE = {
     # a book
@@ -62,12 +62,16 @@ REQ_FIELDS_BY_TYPE = {
         'doi',
         'url'
     }),
+
+    'unpublished': MIN_FIELDS.union({
+        'note'
+    })
 }
 ################################################################################
 FIELD_VENUE_BY_TYPE = {
     'book':             None,
     'inbook':           None,
-    'incollection':     None,
+    'incollection':     'booktitle',
 
     'article':          'journal',
 
@@ -78,7 +82,9 @@ FIELD_VENUE_BY_TYPE = {
     'techreport':       None,
     'phdthesis':        None,
 
-    'misc':             None
+    'misc':             None,
+
+    'unpublished':      None
 }
 ################################################################################
 from pybtex.database import parse_file, BibliographyData, Entry
